@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: tracker_local_only
+      POSTGRES_DB: self_tracker
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - tracker_db:/var/lib/postgresql
+      - ./apps/api/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker -d self_tracker"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  tracker_db:

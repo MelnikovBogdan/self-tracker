@@ -1,0 +1,12 @@
+{
+  "name": "self-tracker",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @self-tracker/api dev",
+    "db:migrate": "pnpm --filter @self-tracker/api db:migrate",
+    "owner:create": "pnpm --filter @self-tracker/api owner:create",
+    "test": "pnpm --filter @self-tracker/api test",
+    "typecheck": "pnpm --filter @self-tracker/api typecheck"
+  }
+}

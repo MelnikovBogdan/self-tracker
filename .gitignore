@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+.dart_tool/
+.flutter-plugins*
+.packages
+.pub-cache/
+build/
+*.iml
+apps/client/android/local.properties
+apps/client/android/key.properties
+apps/client/ios/Flutter/Generated.xcconfig
+apps/client/macos/Flutter/GeneratedPluginRegistrant.swift

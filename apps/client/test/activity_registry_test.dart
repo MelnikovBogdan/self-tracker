@@ -88,8 +88,31 @@ void main() {
         home: HomeShell(session: session, registry: ActivityRegistry([])),
       ),
     );
-    expect(find.text('Активности появятся здесь'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Мой день'), findsOneWidget);
+    expect(find.text('Календарь'), findsOneWidget);
     expect(find.text('Профиль'), findsOneWidget);
+    session.dispose();
+    api.close();
+  });
+
+  testWidgets('calendar shell fits a 320 pixel phone', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      baseUri: Uri.parse('http://127.0.0.1:3000'),
+      httpClient: MockClient((_) async => throw UnimplementedError()),
+    );
+    final session = SessionController(api, MemoryStore());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeShell(session: session, registry: ActivityRegistry([])),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     session.dispose();
     api.close();
   });

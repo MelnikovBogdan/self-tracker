@@ -57,9 +57,34 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Self Tracker',
+      title: 'Планировщик',
       theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF42687B),
+        fontFamily: 'Inter',
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF805F58),
+          surface: const Color(0xFFFFFEFC),
+          error: const Color(0xFFA14F46),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF6F5F1),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF805F58),
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF343B38),
+            minimumSize: const Size(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
         useMaterial3: true,
       ),
       home: _configurationError != null
@@ -84,6 +109,10 @@ class _MainAppState extends State<MainApp> {
                 SessionState.signedIn => HomeShell(
                   session: _session!,
                   registry: activityRegistry,
+                  eventRepository: ApiEventRepository(
+                    _api!,
+                    () => _session!.token!,
+                  ),
                 ),
               },
             ),

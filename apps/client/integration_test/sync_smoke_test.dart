@@ -51,7 +51,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(0), username);
     await tester.enterText(find.byType(TextField).at(1), password);
     await tester.tap(find.text('Войти'));
-    await waitFor(tester, find.text('Активности появятся здесь'));
+    await waitFor(tester, find.text('Мой день'));
 
     await openProfile(tester);
     if (expectedInitialName.isNotEmpty) {
@@ -85,7 +85,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     app.main();
-    await waitFor(tester, find.text('Активности появятся здесь'));
+    await waitFor(tester, find.text('Мой день'));
     await openProfile(tester);
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,

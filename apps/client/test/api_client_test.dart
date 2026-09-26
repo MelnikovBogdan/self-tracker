@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:self_tracker_client/api/api_client.dart';
+import 'package:self_tracker_client/calendar/events.dart';
 
 void main() {
   test('profile update sends revision and parses a conflict', () async {
@@ -87,6 +88,78 @@ void main() {
     final profile = await client.getProfile(login.token);
     expect(profile.displayName, 'Owner');
     expect(profile.revision, 1);
+    client.close();
+  });
+
+  test('calendar repository uses the event contract and current revision on conflict', () async {
+    final requests = <http.Request>[];
+    final current = {
+      'id': 'ca6f0d55-4ca6-4ad0-aee4-d46722817e28',
+      'date': '2026-09-26',
+      'startTime': '09:00',
+      'endTime': '10:00',
+      'title': 'Чтение',
+      'description': '',
+      'color': 'neutral',
+      'revision': 2,
+    };
+    final client = ApiClient(
+      baseUri: Uri.parse('http://127.0.0.1:3000'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET' && request.url.path == '/v1/events') {
+          return http.Response(
+            jsonEncode({
+              'events': [current],
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'dates': ['2026-09-26'],
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({'error': 'conflict', 'event': current}),
+          409,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    final repository = ApiEventRepository(client, () => 'session-token');
+    expect((await repository.list('2026-09-26')).single.revision, 2);
+    expect(await repository.busyDays(2026, 9), {'2026-09-26'});
+    await expectLater(
+      repository.update(
+        current['id'] as String,
+        const EventDraft(
+          date: '2026-09-26',
+          startTime: '11:00',
+          endTime: '12:00',
+          title: 'Мои правки',
+        ),
+        1,
+      ),
+      throwsA(
+        isA<EventConflict>().having(
+          (error) => error.current?.revision,
+          'revision',
+          2,
+        ),
+      ),
+    );
+    expect(jsonDecode(requests.last.body)['revision'], 1);
+    expect(
+      requests.every(
+        (request) => request.headers['authorization'] == 'Bearer session-token',
+      ),
+      isTrue,
+    );
     client.close();
   });
 }

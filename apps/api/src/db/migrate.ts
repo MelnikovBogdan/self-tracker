@@ -7,8 +7,13 @@ import { createPool } from './pool.js';
 export type Migration = { id: string; sql: string };
 
 export async function baseMigrations(): Promise<Migration[]> {
-  const path = fileURLToPath(new URL('../../migrations/001_init.sql', import.meta.url));
-  return [{ id: '001_init', sql: await readFile(path, 'utf8') }];
+  const paths = [
+    ['001_init', '../../migrations/001_init.sql'],
+    ['002_events', '../../migrations/002_events.sql'],
+  ];
+  return Promise.all(paths.map(async ([id, relative]) => ({
+    id, sql: await readFile(fileURLToPath(new URL(relative, import.meta.url)), 'utf8'),
+  })));
 }
 
 export async function runMigrations(database: Database, migrations: Migration[]): Promise<void> {

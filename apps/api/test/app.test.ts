@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import argon2 from 'argon2';
+import { randomUUID } from 'node:crypto';
 import { Ajv } from 'ajv';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -175,5 +176,71 @@ describe('API foundation', () => {
     expect(tables.rows.map((row) => row.tablename).sort()).toEqual([
       'programming_fixture', 'reading_fixture',
     ]);
+  });
+});
+
+describe('calendar events', () => {
+  test('two sessions share ordered plans, overlaps and a moved event', async () => {
+    const android = (await login()).json().token as string;
+    const macos = (await login()).json().token as string;
+    const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+    const later = await app.inject({ method: 'POST', path: '/v1/events', headers: auth(android),
+      payload: { date: '2026-09-26', startTime: '11:30', endTime: '12:30', title: 'Работа', color: 'slate' } });
+    expect(later.statusCode).toBe(201);
+    expect(later.json()).toMatchObject({ title: 'Работа', description: '', color: 'slate', revision: 1 });
+    const earlier = await app.inject({ method: 'POST', path: '/v1/events', headers: auth(android),
+      payload: { date: '2026-09-26', startTime: '09:00', endTime: '10:00', title: 'Прогулка' } });
+    expect(earlier.statusCode).toBe(201);
+    const overlapping = await app.inject({ method: 'POST', path: '/v1/events', headers: auth(android),
+      payload: { date: '2026-09-26', startTime: '09:30', endTime: '11:00', title: 'Звонок' } });
+    expect(overlapping.statusCode).toBe(201);
+    const day = await app.inject({ method: 'GET', path: '/v1/events?date=2026-09-26', headers: auth(macos) });
+    expect(day.statusCode).toBe(200);
+    expect(day.json().events.map((event: any) => event.title)).toEqual(['Прогулка', 'Звонок', 'Работа']);
+    const days = await app.inject({ method: 'GET', path: '/v1/events/days?month=2026-09', headers: auth(macos) });
+    expect(days.json().dates).toContain('2026-09-26');
+
+    const moved = await app.inject({ method: 'PUT', path: `/v1/events/${later.json().id}`, headers: auth(android),
+      payload: { date: '2026-09-27', startTime: '08:00', endTime: '09:00', title: 'Работа', color: 'slate', revision: 1 } });
+    expect(moved.statusCode).toBe(200);
+    expect(moved.json().revision).toBe(2);
+    expect((await app.inject({ method: 'GET', path: '/v1/events?date=2026-09-27', headers: auth(macos) })).json().events).toHaveLength(1);
+
+    const stale = await app.inject({ method: 'PUT', path: `/v1/events/${later.json().id}`, headers: auth(macos),
+      payload: { date: '2026-09-27', startTime: '10:00', endTime: '11:00', title: 'Мои правки', revision: 1 } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().event).toEqual(moved.json());
+    const overwritten = await app.inject({ method: 'PUT', path: `/v1/events/${later.json().id}`, headers: auth(macos),
+      payload: { date: '2026-09-27', startTime: '10:00', endTime: '11:00', title: 'Мои правки', revision: stale.json().event.revision } });
+    expect(overwritten.statusCode).toBe(200);
+    expect(overwritten.json().revision).toBe(3);
+    const staleDelete = await app.inject({ method: 'DELETE', path: `/v1/events/${later.json().id}`, headers: auth(android), payload: { revision: 2 } });
+    expect(staleDelete.statusCode).toBe(409);
+    expect(staleDelete.json().event).toEqual(overwritten.json());
+    const deleted = await app.inject({ method: 'DELETE', path: `/v1/events/${later.json().id}`, headers: auth(android), payload: { revision: 3 } });
+    expect(deleted.statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', path: '/v1/events?date=2026-09-27', headers: auth(macos) })).json().events).toEqual([]);
+  });
+
+  test('validates dates and fields and protects routes', async () => {
+    const token = (await login()).json().token as string;
+    const headers = { authorization: `Bearer ${token}` };
+    expect((await app.inject({ method: 'GET', path: '/v1/events?date=2026-09-26' })).statusCode).toBe(401);
+    for (const payload of [
+      { date: '2026-02-30', startTime: '09:00', endTime: '10:00', title: 'Bad date' },
+      { date: '2026-09-26', startTime: '10:00', endTime: '09:00', title: 'Bad time' },
+      { date: '2026-09-26', startTime: '09:00', endTime: '10:00', title: '  ' },
+    ]) {
+      expect((await app.inject({ method: 'POST', path: '/v1/events', headers, payload })).statusCode).toBe(400);
+    }
+    expect((await app.inject({ method: 'GET', path: '/v1/events?date=2026-02-30', headers })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'DELETE', path: `/v1/events/${randomUUID()}`, headers, payload: { revision: 1 } })).statusCode).toBe(404);
+    const document = app.swagger() as any;
+    for (const path of ['/v1/events', '/v1/events/days', '/v1/events/{id}']) {
+      expect(document.paths[path]).toBeDefined();
+    }
+    const schema = document.paths['/v1/events'].get.responses['200'].content['application/json'].schema;
+    const result = await app.inject({ method: 'GET', path: '/v1/events?date=2026-09-26', headers });
+    expect(new Ajv().addFormat('uuid', /^[0-9a-f-]{36}$/i).compile(schema)(result.json())).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import Fastify, { type FastifyError, type FastifyInstance, type preHandlerHookHa
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Database } from './db/pool.js';
 import { type ActivityModule, validateActivityModules } from './activity-modules.js';
+import { registerEventRoutes } from './events.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -202,6 +203,8 @@ export async function buildApp(database: Database, modules: ActivityModule[] = [
     );
     return reply.code(409).send({ error: 'Profile was changed on another device', profile: profile(current.rows[0]) });
   });
+
+  await registerEventRoutes(app, database, authenticate);
 
   for (const module of modules) {
     await app.register(async (scope) => {

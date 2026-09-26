@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../calendar/events.dart';
+
 class ApiException implements Exception {
   const ApiException(this.message);
   final String message;
@@ -155,4 +157,96 @@ class ApiClient {
   }
 
   void close() => _http.close();
+}
+
+class ApiEventRepository implements EventRepository {
+  ApiEventRepository(this.api, this.token);
+  final ApiClient api;
+  final String Function() token;
+
+  @override
+  Future<List<CalendarEvent>> list(String date) async {
+    final response = await api._send(
+      () => api._http.get(
+        api._uri('/v1/events?date=$date'),
+        headers: api._headers(token()),
+      ),
+    );
+    api._expectSuccess(response);
+    return (api._body(response)['events'] as List<dynamic>)
+        .map((item) => CalendarEvent.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<Set<String>> busyDays(int year, int month) async {
+    final value =
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
+    final response = await api._send(
+      () => api._http.get(
+        api._uri('/v1/events/days?month=$value'),
+        headers: api._headers(token()),
+      ),
+    );
+    api._expectSuccess(response);
+    return (api._body(response)['dates'] as List<dynamic>)
+        .cast<String>()
+        .toSet();
+  }
+
+  @override
+  Future<CalendarEvent> create(EventDraft draft) async {
+    final response = await api._send(
+      () => api._http.post(
+        api._uri('/v1/events'),
+        headers: {...api._headers(token()), 'Content-Type': 'application/json'},
+        body: jsonEncode(draft.toJson()),
+      ),
+    );
+    api._expectSuccess(response);
+    return CalendarEvent.fromJson(api._body(response));
+  }
+
+  @override
+  Future<CalendarEvent> update(
+    String id,
+    EventDraft draft,
+    int revision,
+  ) async {
+    final response = await api._send(
+      () => api._http.put(
+        api._uri('/v1/events/$id'),
+        headers: {...api._headers(token()), 'Content-Type': 'application/json'},
+        body: jsonEncode(draft.toJson(revision: revision)),
+      ),
+    );
+    if (response.statusCode == 409) {
+      throw EventConflict(
+        CalendarEvent.fromJson(
+          api._body(response)['event'] as Map<String, dynamic>,
+        ),
+      );
+    }
+    api._expectSuccess(response);
+    return CalendarEvent.fromJson(api._body(response));
+  }
+
+  @override
+  Future<void> delete(String id, int revision) async {
+    final response = await api._send(
+      () => api._http.delete(
+        api._uri('/v1/events/$id'),
+        headers: {...api._headers(token()), 'Content-Type': 'application/json'},
+        body: jsonEncode({'revision': revision}),
+      ),
+    );
+    if (response.statusCode == 409) {
+      throw EventConflict(
+        CalendarEvent.fromJson(
+          api._body(response)['event'] as Map<String, dynamic>,
+        ),
+      );
+    }
+    api._expectSuccess(response);
+  }
 }
